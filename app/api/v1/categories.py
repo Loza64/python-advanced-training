@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import StringConstraints
 from fastapi_pagination import Params
 from app.api.deps import get_category_service
 from app.mappers.category_mapper import CategoryMapper
@@ -7,6 +10,7 @@ from app.schemas.pagination import PaginatedResponse, PaginationMeta
 from app.services.category_service import CategoryService
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
+SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(asc|desc)$")]
 
 
 @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
@@ -15,8 +19,12 @@ def create_category(data: CategoryCreate, service: CategoryService = Depends(get
 
 
 @router.get("", response_model=PaginatedResponse[CategoryResponse])
-def list_categories(params: Params = Depends(), service: CategoryService = Depends(get_category_service)):
-    page = service.list(params)
+def list_categories(
+    params: Params = Depends(),
+    sort: list[SortItem] | None = Query(None, min_length=1),
+    service: CategoryService = Depends(get_category_service),
+):
+    page = service.list(params, sort)
     return PaginatedResponse(
         data=CategoryMapper.to_responses(page.items),
         pagination=PaginationMeta(

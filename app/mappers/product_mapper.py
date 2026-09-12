@@ -5,7 +5,9 @@ from app.schemas.product import ProductCreate, ProductResponse
 class ProductMapper:
     @staticmethod
     def to_model(data: ProductCreate) -> Product:
-        return Product(**data.model_dump())
+        values = data.model_dump(exclude={"category"})
+        values["category_id"] = data.category.id
+        return Product(**values)
 
     @staticmethod
     def to_response(product: Product) -> ProductResponse:

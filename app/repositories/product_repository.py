@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate
 
+from app.core.sorting import apply_sort
 from app.models.product import Product
 
 
@@ -10,8 +11,17 @@ class ProductRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def list(self, params: Params) -> Page[Product]:
-        query = select(Product).order_by(Product.id)
+    def list(self, params: Params, sort: list[str] | None) -> Page[Product]:
+        query = select(Product)
+        if sort:
+            query = apply_sort(
+                query,
+                Product,
+                sort,
+                {"id", "name", "description", "price", "in_stock", "category_id"},
+            )
+        else:
+            query = query.order_by(Product.id)
         return paginate(self.session, query, params)
 
     def get(self, product_id: int) -> Product | None:

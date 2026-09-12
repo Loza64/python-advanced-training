@@ -9,8 +9,8 @@ class CategoryService:
     def __init__(self, repository: CategoryRepositoryPort) -> None:
         self.repository = repository
 
-    def list(self, params: Params) -> Page[Category]:
-        return self.repository.list(params)
+    def list(self, params: Params, sort: list[str] | None) -> Page[Category]:
+        return self.repository.list(params, sort)
 
     def get(self, category_id: int) -> Category | None:
         return self.repository.get(category_id)

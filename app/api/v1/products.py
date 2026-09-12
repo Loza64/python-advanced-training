@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import StringConstraints
 from fastapi_pagination import Params
 from app.api.deps import get_product_service
 from app.mappers.product_mapper import ProductMapper
@@ -7,6 +10,7 @@ from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 from app.services.product_service import ProductService
 
 router = APIRouter(prefix="/products", tags=["Products"])
+SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(asc|desc)$")]
 
 
 @router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
@@ -15,8 +19,12 @@ def create_product(data: ProductCreate, service: ProductService = Depends(get_pr
 
 
 @router.get("", response_model=PaginatedResponse[ProductResponse])
-def list_products(params: Params = Depends(), service: ProductService = Depends(get_product_service)):
-    page = service.list(params)
+def list_products(
+    params: Params = Depends(),
+    sort: list[SortItem] | None = Query(None, min_length=1),
+    service: ProductService = Depends(get_product_service),
+):
+    page = service.list(params, sort)
     return PaginatedResponse(
         data=ProductMapper.to_responses(page.items),
         pagination=PaginationMeta(

@@ -9,8 +9,8 @@ class ProductService:
     def __init__(self, repository: ProductRepositoryPort) -> None:
         self.repository = repository
 
-    def list(self, params: Params) -> Page[Product]:
-        return self.repository.list(params)
+    def list(self, params: Params, sort: list[str] | None) -> Page[Product]:
+        return self.repository.list(params, sort)
 
     def get(self, product_id: int) -> Product | None:
         return self.repository.get(product_id)
@@ -22,7 +22,9 @@ class ProductService:
         product = self.repository.get(product_id)
         if product is None:
             return None
-        for field, value in data.model_dump().items():
+        values = data.model_dump(exclude={"category"})
+        values["category_id"] = data.category.id
+        for field, value in values.items():
             setattr(product, field, value)
         return self.repository.save(product)
 
