@@ -159,6 +159,164 @@ Antes de desplegar una migración en producción:
 
 El backend no ejecuta `create_all()` al arrancar. Esto evita cambios de esquema accidentales y obliga a usar migraciones versionadas.
 
+### Despliegue recomendado en AWS
+
+Entre AWS y DigitalOcean, AWS es generalmente la plataforma más utilizada por empresas y ofrece un ecosistema más amplio para producción. Para este proyecto, una arquitectura administrada y razonable es:
+
+```text
+Frontend o cliente
+	|
+	v
+Route 53 -> Application Load Balancer -> ECS Fargate
+				      |
+				      v
+			      Products API (Docker)
+				      |
+				      v
+			      RDS PostgreSQL
+```
+
+Servicios recomendados:
+
+- **Amazon ECR**: almacena la imagen Docker.
+- **Amazon ECS Fargate**: ejecuta la API sin administrar servidores.
+- **Application Load Balancer**: recibe tráfico HTTP/HTTPS y distribuye peticiones.
+- **AWS Certificate Manager (ACM)**: certificado TLS gratuito para el dominio usado por el load balancer.
+- **Amazon RDS for PostgreSQL**: base de datos administrada, backups y recuperación a un punto en el tiempo.
+- **AWS Secrets Manager o Systems Manager Parameter Store**: guarda `DATABASE_URL` y otros secretos fuera de la imagen.
+- **Amazon CloudWatch**: logs, métricas y alarmas.
+- **Route 53**: DNS del dominio y registro hacia el load balancer.
+
+Flujo inicial:
+
+1. Crea un repositorio privado en ECR.
+2. Construye la imagen y publícala en ECR desde CI/CD o desde una máquina de despliegue.
+3. Crea una base PostgreSQL en RDS dentro de una VPC. Mantén RDS en subredes privadas y permite conexiones únicamente desde el security group de ECS.
+4. Crea un cluster ECS y un servicio Fargate usando la imagen de ECR.
+5. Configura la task definition con `PORT=8000` y la `DATABASE_URL` inyectada desde Secrets Manager. No guardes contraseñas directamente en el repositorio ni en el Dockerfile.
+6. Configura el health check del target group hacia `/health/ready`. Ese endpoint comprueba que la API también puede conectarse a PostgreSQL.
+7. Crea un Application Load Balancer público. Escucha en `443` y reenvía al puerto `8000` del contenedor. Redirige `80` hacia `443`.
+8. Solicita en ACM un certificado para `api.ejemplo.com` y valida el dominio mediante DNS.
+9. En Route 53 crea un registro `A` de tipo Alias que apunte `api.ejemplo.com` al Application Load Balancer.
+10. Ejecuta las migraciones como paso controlado antes de poner una nueva versión en servicio:
+
+    ```powershell
+    docker run --rm --env-file .env IMAGE_URI alembic upgrade head
+    ```
+
+    En AWS, este comando debe ejecutarse desde una tarea ECS temporal o desde el pipeline, con acceso de red a RDS y los secretos inyectados de la misma forma que en la aplicación.
+
+Antes de cada despliegue: crea o confirma un backup de RDS, aplica la migración, actualiza la task definition a una nueva versión de imagen y verifica `/health/live`, `/health/ready`, `/docs` y los logs de CloudWatch. Configura al menos alarmas para errores 5xx, tareas detenidas, falta de memoria y conexiones fallidas a la base.
+
+### Alternativa sencilla: DigitalOcean
+
+DigitalOcean suele ser más simple y económico para una API pequeña. Puedes usar App Platform o un Droplet con Docker, Managed PostgreSQL, un dominio y HTTPS administrado. El flujo es equivalente: publicar la imagen, configurar `DATABASE_URL` como secreto, apuntar el dominio al servicio, ejecutar Alembic y verificar los health checks.
+
+Usa DigitalOcean si priorizas facilidad operativa y el tráfico es moderado. Usa AWS si necesitas más opciones de red, escalado, integración empresarial, regiones o servicios administrados. En ambos casos, no publiques PostgreSQL directamente a Internet y no incluyas secretos en `.env` dentro de la imagen.
+
+## Agregar una nueva entidad o dominio funcional
+
+Para agregar una nueva entidad, por ejemplo `Supplier`, sigue el mismo flujo por capas que usan `Category` y `Product`. El nombre debe mantenerse consistente en singular para la clase Python y en plural para la tabla y las rutas.
+
+### 1. Crear el modelo ORM
+
+Crea `app/models/supplier.py` con las columnas, restricciones, índices y relaciones necesarias:
+
+```python
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, index=True)
+```
+
+Exporta el modelo desde `app/models/__init__.py` para que Alembic lo incluya en `Base.metadata`.
+
+### 2. Crear y revisar la migración
+
+Genera una migración después de crear o cambiar el modelo:
+
+```powershell
+.\venv\Scripts\python.exe -m alembic revision --autogenerate -m "create suppliers"
+```
+
+Revisa manualmente el archivo generado y confirma que contiene la tabla, índices, claves foráneas y restricciones esperadas. Después aplícalo:
+
+```powershell
+.\venv\Scripts\python.exe -m alembic upgrade head
+```
+
+En producción, haz un backup antes de aplicar la migración.
+
+### 3. Crear los schemas Pydantic
+
+Añade `app/schemas/supplier.py` con schemas separados para entrada, actualización y respuesta:
+
+```python
+class SupplierCreate(SupplierBase):
+    pass
+
+
+class SupplierUpdate(SupplierBase):
+    pass
+
+
+class SupplierResponse(SupplierBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+```
+
+Usa `Field` para validar longitudes, rangos y valores obligatorios antes de llegar al servicio.
+
+### 4. Crear mapper, contrato, repositorio y servicio
+
+Añade estos archivos siguiendo las implementaciones existentes:
+
+```text
+app/mappers/supplier_mapper.py
+app/repositories/supplier_repository.py
+app/services/supplier_service.py
+```
+
+El mapper convierte entre ORM y schemas. El repositorio contiene consultas SQLAlchemy y operaciones de persistencia. El servicio contiene las reglas de negocio. Si el servicio depende del repositorio, declara el contrato en `app/core/ports.py` usando `Protocol`.
+
+Para listados, reutiliza `Params`, `Page`, `paginate`, búsqueda, ordenamiento y el formato `PaginatedResponse` existente.
+
+### 5. Crear el router y registrarlo
+
+Crea `app/api/v1/suppliers.py` con las operaciones necesarias (`GET`, `POST`, `PUT` y `DELETE`). Define `response_model`, tags, validaciones y códigos HTTP como en los routers actuales.
+
+Después registra la dependencia y el router:
+
+```python
+# app/api/deps.py
+def get_supplier_service(db: Session = Depends(get_db)) -> SupplierService:
+    return SupplierService(SupplierRepository(db))
+
+# app/main.py
+app.include_router(suppliers.router, prefix=settings.api_v1_prefix)
+```
+
+Comprueba que las rutas queden bajo `/api/v1/suppliers` y que aparezcan en Swagger.
+
+### 6. Añadir pruebas y verificar el flujo
+
+Prueba al menos creación, consulta individual, listado paginado, `search`, `sort`, actualización, borrado, validación de entrada y errores de relaciones. Finalmente ejecuta:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest
+.\venv\Scripts\python.exe -m alembic check
+```
+
+La entidad no está completa hasta que el modelo, la migración, el contrato, el acceso a datos, las reglas de negocio, la API y las pruebas estén conectados.
+
 ## Backup y restauración
 
 Necesitas tener instalado el cliente PostgreSQL (`pg_dump`, `pg_restore`) en la máquina de despliegue o de operaciones. Con `DATABASE_URL` cargada como secreto:
