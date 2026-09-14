@@ -2,11 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import StringConstraints
-from fastapi_pagination import Params
 from app.api.deps import get_category_service
 from app.mappers.category_mapper import CategoryMapper
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
-from app.schemas.pagination import PaginatedResponse, PaginationMeta
+from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
 from app.services.category_service import CategoryService
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
@@ -20,11 +19,25 @@ def create_category(data: CategoryCreate, service: CategoryService = Depends(get
 
 @router.get("", response_model=PaginatedResponse[CategoryResponse])
 def list_categories(
-    params: Params = Depends(),
-    sort: list[SortItem] | None = Query(None, min_length=1),
+    params: PaginationParams = Depends(),
+    sort: list[SortItem] | None = Query(
+        None,
+        min_length=1,
+        description="Orden de resultados. Usa campo,direccion y repite sort para varios campos.",
+        openapi_examples={
+            "name_asc": {"summary": "Nombre A-Z", "value": ["name,asc"]},
+            "name_desc": {"summary": "Nombre Z-A", "value": ["name,desc"]},
+        },
+    ),
+    search: str | None = Query(
+        None,
+        min_length=1,
+        description="Texto que se buscará en el nombre y la descripción de la categoría.",
+        examples=["electronics"],
+    ),
     service: CategoryService = Depends(get_category_service),
 ):
-    page = service.list(params, sort)
+    page = service.list(params, sort, search)
     return PaginatedResponse(
         data=CategoryMapper.to_responses(page.items),
         pagination=PaginationMeta(

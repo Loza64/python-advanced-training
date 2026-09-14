@@ -1,12 +1,10 @@
 import logging
-import time
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi_pagination import add_pagination
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -14,29 +12,52 @@ from app.api.v1 import categories, products
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db.session import engine
+from app.middleware.product_category import ProductCategoryMiddleware
+from app.middleware.request_logging import RequestLoggingMiddleware
 
 configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.project_name)
+openapi_tags = [
+    {
+        "name": "Products",
+        "description": "Create, search, sort, paginate and manage products.",
+    },
+    {
+        "name": "Categories",
+        "description": "Create, search, sort, paginate and manage product categories.",
+    },
+    {
+        "name": "Health",
+        "description": "Application and database health checks.",
+    },
+]
 
-
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        started = time.perf_counter()
-        response = await call_next(request)
-        duration_ms = (time.perf_counter() - started) * 1000
-        logger.info(
-            "%s %s -> %s (%.2f ms)",
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-        )
-        return response
+app = FastAPI(
+    title=settings.project_name,
+    summary="Product and category management API",
+    description=(
+        "## Products API\n\n"
+        "A REST API for managing products and categories.\n\n"
+        "Use `page` and `size` for pagination, `search` for text filtering, "
+        "and repeat `sort` to combine ordering fields."
+    ),
+    version="1.0.0",
+    openapi_tags=openapi_tags,
+    swagger_ui_parameters={
+        "deepLinking": True,
+        "displayRequestDuration": True,
+        "docExpansion": "list",
+        "filter": True,
+        "defaultModelsExpandDepth": -1,
+        "persistAuthorization": True,
+        "syntaxHighlight": {"theme": "arta"},
+    },
+)
 
 
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(ProductCategoryMiddleware)
 
 
 @app.exception_handler(RequestValidationError)

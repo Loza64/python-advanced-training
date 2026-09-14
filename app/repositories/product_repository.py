@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate
@@ -11,8 +11,13 @@ class ProductRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def list(self, params: Params, sort: list[str] | None) -> Page[Product]:
+    def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[Product]:
         query = select(Product)
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.where(
+                or_(Product.name.ilike(search_pattern), Product.description.ilike(search_pattern))
+            )
         if sort:
             query = apply_sort(
                 query,

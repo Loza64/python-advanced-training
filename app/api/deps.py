@@ -27,6 +27,6 @@ def get_category_service(db: Session = Depends(get_db)) -> CategoryService:
 
 
 def get_product_service(db: Session = Depends(get_db)) -> ProductService:
-	return ProductService(ProductRepository(db))
+	return ProductService(ProductRepository(db), CategoryRepository(db))
 
 # Aquí más adelante también irían dependencias de autenticación (JWT, etc.)
