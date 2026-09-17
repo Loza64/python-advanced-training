@@ -2,12 +2,11 @@ import json
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.repositories.category_repository import CategoryRepository
-from app.services.category_service import CategoryService
+from app.services.product_category_service import ProductCategoryService
 
 
 class ProductCategoryMiddleware(BaseHTTPMiddleware):
@@ -26,29 +25,11 @@ class ProductCategoryMiddleware(BaseHTTPMiddleware):
 
         request._receive = receive  # noqa: SLF001
 
-        try:
-            payload = json.loads(body)
-            category_id = payload["category"]["id"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return JSONResponse(
-                status_code=422,
-                content={"detail": "category.id must be an integer"},
-            )
-
-        if type(category_id) is not int:
-            return JSONResponse(
-                status_code=422,
-                content={"detail": "category.id must be an integer"},
-            )
+        payload = json.loads(body)
 
         with SessionLocal() as db:
-            category = CategoryService(CategoryRepository(db)).get(category_id)
-
-        if category is None:
-            return JSONResponse(
-                status_code=404,
-                content={"detail": f"Category {category_id} not found"},
-            )
+            service = ProductCategoryService(CategoryRepository(db))
+            service.validate_payload(payload)
 
         return await call_next(request)
 

@@ -1,14 +1,9 @@
 from app.models.category import Category
 from fastapi_pagination import Page, Params
+from app.core.exceptions import DuplicateCategoryNameError
 from app.core.ports import CategoryRepositoryPort
 from app.mappers.category_mapper import CategoryMapper
 from app.schemas.category import CategoryCreate, CategoryUpdate
-
-
-class DuplicateCategoryNameError(ValueError):
-    def __init__(self, name: str) -> None:
-        self.name = name
-        super().__init__(f"Category '{name}' already exists")
 
 
 class CategoryService:

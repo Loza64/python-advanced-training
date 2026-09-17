@@ -3,10 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import StringConstraints
 from app.api.deps import get_product_service
+from app.core.exceptions import CategoryNotFoundError
 from app.mappers.product_mapper import ProductMapper
 from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
-from app.services.product_service import CategoryNotFoundError, ProductService
+from app.services.product_service import ProductService
 
 router = APIRouter(prefix="/products", tags=["Products"])
 SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(asc|desc)$")]

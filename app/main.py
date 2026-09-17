@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from app.api.v1 import categories, products
 from app.core.config import settings
+from app.core.exceptions import AppError, CategoryNotFoundError, DuplicateCategoryNameError, ProductCategoryValidationError
 from app.core.logging import configure_logging
 from app.db.session import engine
 from app.middleware.product_category import ProductCategoryMiddleware
@@ -63,6 +64,19 @@ app.add_middleware(ProductCategoryMiddleware)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_: Request, exception: RequestValidationError):
     return JSONResponse(status_code=422, content={"detail": exception.errors()})
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(_: Request, exception: AppError):
+    status_code = 400
+    if isinstance(exception, DuplicateCategoryNameError):
+        status_code = 409
+    elif isinstance(exception, CategoryNotFoundError):
+        status_code = 404
+    elif isinstance(exception, ProductCategoryValidationError):
+        status_code = 422
+
+    return JSONResponse(status_code=status_code, content={"detail": str(exception)})
 
 
 @app.exception_handler(SQLAlchemyError)

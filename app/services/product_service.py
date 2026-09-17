@@ -1,14 +1,9 @@
 from app.models.product import Product
 from fastapi_pagination import Page, Params
+from app.core.exceptions import CategoryNotFoundError
 from app.core.ports import CategoryRepositoryPort, ProductRepositoryPort
 from app.mappers.product_mapper import ProductMapper
 from app.schemas.product import ProductCreate, ProductUpdate
-
-
-class CategoryNotFoundError(Exception):
-    def __init__(self, category_id: int) -> None:
-        self.category_id = category_id
-        super().__init__(f"Category {category_id} not found")
 
 
 class ProductService:

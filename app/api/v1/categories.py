@@ -3,10 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import StringConstraints
 from app.api.deps import get_category_service
+from app.core.exceptions import DuplicateCategoryNameError
 from app.mappers.category_mapper import CategoryMapper
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
 from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
-from app.services.category_service import CategoryService, DuplicateCategoryNameError
+from app.services.category_service import CategoryService
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(asc|desc)$")]
