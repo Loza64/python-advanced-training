@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.repositories.category_repository import CategoryRepository
+from app.services.category_service import CategoryService
 
 
 class ProductCategoryMiddleware(BaseHTTPMiddleware):
@@ -41,7 +42,7 @@ class ProductCategoryMiddleware(BaseHTTPMiddleware):
             )
 
         with SessionLocal() as db:
-            category = CategoryRepository(db).get(category_id)
+            category = CategoryService(CategoryRepository(db)).get(category_id)
 
         if category is None:
             return JSONResponse(

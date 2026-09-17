@@ -16,8 +16,8 @@ engine = create_engine(
     pool_recycle=settings.database_pool_recycle,
     pool_pre_ping=True,
 )
-SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
@@ -25,3 +25,6 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+__all__ = ["engine", "SessionLocal", "get_db"]

@@ -6,7 +6,7 @@ from app.api.deps import get_category_service
 from app.mappers.category_mapper import CategoryMapper
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
 from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
-from app.services.category_service import CategoryService
+from app.services.category_service import CategoryService, DuplicateCategoryNameError
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(asc|desc)$")]
@@ -14,7 +14,10 @@ SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(a
 
 @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
 def create_category(data: CategoryCreate, service: CategoryService = Depends(get_category_service)):
-    return CategoryMapper.to_response(service.create(data))
+    try:
+        return CategoryMapper.to_response(service.create(data))
+    except DuplicateCategoryNameError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get("", response_model=PaginatedResponse[CategoryResponse])
@@ -59,7 +62,10 @@ def get_category(category_id: int, service: CategoryService = Depends(get_catego
 
 @router.put("/{category_id}", response_model=CategoryResponse)
 def update_category(category_id: int, data: CategoryUpdate, service: CategoryService = Depends(get_category_service)):
-    category = service.update(category_id, data)
+    try:
+        category = service.update(category_id, data)
+    except DuplicateCategoryNameError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if category is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
     return CategoryMapper.to_response(category)

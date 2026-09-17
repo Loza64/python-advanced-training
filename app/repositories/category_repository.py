@@ -32,6 +32,9 @@ class CategoryRepository:
     def get(self, category_id: int) -> Category | None:
         return self.session.get(Category, category_id)
 
+    def get_by_name(self, name: str) -> Category | None:
+        return self.session.scalar(select(Category).where(Category.name.ilike(name)))
+
     def add(self, category: Category) -> Category:
         self.session.add(category)
         self.session.commit()
