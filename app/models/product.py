@@ -11,10 +11,8 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.category import Category
 
-
 class Product(Base):
     __tablename__ = "products"
-
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(150), index=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -22,3 +20,5 @@ class Product(Base):
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
     category: Mapped[Category] = relationship(back_populates="products")
+    
+    

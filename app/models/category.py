@@ -18,3 +18,4 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     products: Mapped[list[Product]] = relationship(back_populates="category")
+    

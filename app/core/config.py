@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     database_pool_recycle: int = 1800
     log_level: str = "INFO"
 
+    # --- Auth / JWT ---
+    JWT_SECRET: str = "insecure-dev-secret-change-me"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

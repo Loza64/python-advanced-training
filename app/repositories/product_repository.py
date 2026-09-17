@@ -46,3 +46,4 @@ class ProductRepository:
     def delete(self, product: Product) -> None:
         self.session.delete(product)
         self.session.commit()
+        
