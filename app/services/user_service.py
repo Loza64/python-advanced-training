@@ -1,6 +1,13 @@
 from fastapi_pagination import Page, Params
 
-from app.core.exceptions import EmailAlreadyExistsError, RoleNotFoundError, UsernameAlreadyExistsError
+from app.core.constants import SUPER_ADMIN_ROLE_NAME
+from app.core.exceptions import (
+    EmailAlreadyExistsError,
+    RoleNotFoundError,
+    SuperAdminAlreadyExistsError,
+    SuperAdminCannotBeDeletedError,
+    UsernameAlreadyExistsError,
+)
 from app.core.ports import RoleRepositoryProtocol, UserRepositoryProtocol
 from app.core.security import hash_password
 from app.models.user import User
@@ -23,8 +30,13 @@ class UserService:
             raise UsernameAlreadyExistsError(data.username)
         if self.repository.get_by_email(data.email) is not None:
             raise EmailAlreadyExistsError(data.email)
-        if data.role_id is not None and self.role_repository.get_by_id(data.role_id) is None:
-            raise RoleNotFoundError(data.role_id)
+
+        if data.role_id is not None:
+            role = self.role_repository.get_by_id(data.role_id)
+            if role is None:
+                raise RoleNotFoundError(data.role_id)
+            if role.name == SUPER_ADMIN_ROLE_NAME and self.repository.exists_with_role(role.id):
+                raise SuperAdminAlreadyExistsError()
 
         user = User(
             username=data.username,
@@ -49,8 +61,13 @@ class UserService:
             user.email = data.email
 
         if data.role_id is not None:
-            if self.role_repository.get_by_id(data.role_id) is None:
+            role = self.role_repository.get_by_id(data.role_id)
+            if role is None:
                 raise RoleNotFoundError(data.role_id)
+            if role.name == SUPER_ADMIN_ROLE_NAME and self.repository.exists_with_role(
+                role.id, exclude_user_id=user_id
+            ):
+                raise SuperAdminAlreadyExistsError()
             user.role_id = data.role_id
 
         if data.name is not None:
@@ -68,5 +85,10 @@ class UserService:
         user = self.repository.get_by_id(user_id)
         if user is None:
             return False
+        if user.role is not None and user.role.name == SUPER_ADMIN_ROLE_NAME:
+            raise SuperAdminCannotBeDeletedError()
         self.repository.delete(user)
         return True
+
+    def restore(self, user_id: int) -> User | None:
+        return self.repository.restore(user_id)

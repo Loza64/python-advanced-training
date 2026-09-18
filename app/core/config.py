@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # --- Super admin (seed inicial, único) ---
+    SUPER_ADMIN_USERNAME: str = "superadmin"
+    SUPER_ADMIN_PASSWORD: str = "ChangeMe123!"
+    SUPER_ADMIN_EMAIL: str = "superadmin@example.com"
+    SUPER_ADMIN_NAME: str = "Super"
+    SUPER_ADMIN_SURNAME: str = "Admin"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

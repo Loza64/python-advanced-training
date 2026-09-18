@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.base import Base, SoftDeleteMixin
 
 if TYPE_CHECKING:
     from app.models.product import Product
 
 
-class Category(Base):
+class Category(SoftDeleteMixin, Base):
     __tablename__ = "categories"
 
     id: Mapped[int] = mapped_column(primary_key=True)

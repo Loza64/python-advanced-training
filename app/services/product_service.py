@@ -43,6 +43,9 @@ class ProductService:
         self.repository.delete(product)
         return True
 
+    def restore(self, product_id: int) -> Product | None:
+        return self.repository.restore(product_id)
+
     def _ensure_category_exists(self, category_id: int) -> None:
         if self.category_repository.get(category_id) is None:
             raise CategoryNotFoundError(category_id)

@@ -23,13 +23,16 @@ from app.core.exceptions import (
     ProductCategoryValidationError,
     RefreshTokenReuseDetectedError,
     RoleNotFoundError,
+    SuperAdminAlreadyExistsError,
+    SuperAdminCannotBeDeletedError,
+    SystemRoleProtectedError,
     UserBlockedError,
     UserNotFoundError,
     UsernameAlreadyExistsError,
 )
 from app.core.logging import configure_logging
 from app.db.base import Base
-from app.db.seed import seed_admin
+from app.db.seed import seed_super_admin
 from app.db.session import SessionLocal, engine
 from app.middleware.product_category import ProductCategoryMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -95,6 +98,18 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(ProductCategoryMiddleware)
 
 
+@app.on_event("startup")
+def run_seed() -> None:
+    """Ejecuta los seeders al arrancar la app. Es idempotente: seed_permissions
+    no duplica permisos existentes, y seed_admin no crea el admin si ya hay
+    usuarios en la base."""
+    db = SessionLocal()
+    try:
+        seed_super_admin(db)
+    finally:
+        db.close()
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_: Request, exception: RequestValidationError):
     return JSONResponse(status_code=422, content={"detail": exception.errors()})
@@ -111,6 +126,7 @@ _CONFLICT_ERRORS = (
     UsernameAlreadyExistsError,
     EmailAlreadyExistsError,
     DuplicateRoleNameError,
+    SuperAdminAlreadyExistsError,
 )
 _UNAUTHORIZED_ERRORS = (
     InvalidCredentialsError,
@@ -120,6 +136,8 @@ _UNAUTHORIZED_ERRORS = (
 _FORBIDDEN_ERRORS = (
     UserBlockedError,
     PermissionDeniedError,
+    SystemRoleProtectedError,
+    SuperAdminCannotBeDeletedError,
 )
 
 

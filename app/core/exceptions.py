@@ -80,6 +80,27 @@ class DuplicateRoleNameError(DomainError):
         super().__init__(f"Role '{name}' already exists")
 
 
+class SystemRoleProtectedError(DomainError):
+    """Un rol de sistema (super_admin, admin, client) no se puede renombrar,
+    borrar, desactivar (super_admin) ni perder permisos (super_admin)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"Role '{name}' is a protected system role")
+
+
+# --- Super admin ---
+
+class SuperAdminAlreadyExistsError(DomainError):
+    def __init__(self) -> None:
+        super().__init__("A super_admin user already exists; only one is allowed")
+
+
+class SuperAdminCannotBeDeletedError(DomainError):
+    def __init__(self) -> None:
+        super().__init__("The super_admin user can never be deleted")
+
+
 # --- Permissions ---
 
 class PermissionNotFoundError(DomainError):

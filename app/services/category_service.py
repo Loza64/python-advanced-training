@@ -43,3 +43,6 @@ class CategoryService:
             return False
         self.repository.delete(category)
         return True
+
+    def restore(self, category_id: int) -> Category | None:
+        return self.repository.restore(category_id)

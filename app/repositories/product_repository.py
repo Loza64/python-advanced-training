@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from fastapi_pagination import Page, Params
@@ -12,7 +14,7 @@ class ProductRepository:
         self.session = session
 
     def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[Product]:
-        query = select(Product)
+        query = select(Product).where(Product.deleted_at.is_(None))
         if search:
             search_pattern = f"%{search}%"
             query = query.where(
@@ -30,7 +32,9 @@ class ProductRepository:
         return paginate(self.session, query, params)
 
     def get(self, product_id: int) -> Product | None:
-        return self.session.get(Product, product_id)
+        return self.session.scalar(
+            select(Product).where(Product.id == product_id, Product.deleted_at.is_(None))
+        )
 
     def add(self, product: Product) -> Product:
         self.session.add(product)
@@ -44,6 +48,17 @@ class ProductRepository:
         return product
 
     def delete(self, product: Product) -> None:
-        self.session.delete(product)
+        """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
+        product.deleted_at = datetime.now(timezone.utc)
         self.session.commit()
-        
+
+    def restore(self, product_id: int) -> Product | None:
+        """Revierte un borrado lógico. Devuelve None si no existe o si no
+        estaba borrado."""
+        product = self.session.scalar(select(Product).where(Product.id == product_id))
+        if product is None or product.deleted_at is None:
+            return None
+        product.deleted_at = None
+        self.session.commit()
+        self.session.refresh(product)
+        return product

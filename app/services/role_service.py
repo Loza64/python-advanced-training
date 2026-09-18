@@ -1,4 +1,5 @@
-from app.core.exceptions import DuplicateRoleNameError
+from app.core.constants import SUPER_ADMIN_ROLE_NAME, SYSTEM_ROLE_NAMES
+from app.core.exceptions import DuplicateRoleNameError, SystemRoleProtectedError
 from app.core.ports import PermissionRepositoryProtocol, RoleRepositoryProtocol
 from app.models.role import Role
 from app.schemas.role import RoleCreate, RoleUpdate
@@ -34,15 +35,21 @@ class RoleService:
 
         if data.name is not None:
             candidate = data.name.strip()
+            if role.name in SYSTEM_ROLE_NAMES and candidate != role.name:
+                raise SystemRoleProtectedError(role.name)
             existing = self.repository.get_by_name(candidate)
             if existing is not None and existing.id != role_id:
                 raise DuplicateRoleNameError(candidate)
             role.name = candidate
 
         if data.active is not None:
+            if role.name == SUPER_ADMIN_ROLE_NAME and data.active is False:
+                raise SystemRoleProtectedError(role.name)
             role.active = data.active
 
         if data.permission_ids is not None:
+            if role.name == SUPER_ADMIN_ROLE_NAME:
+                raise SystemRoleProtectedError(role.name)
             role.permissions = self.permission_repository.get_by_ids(data.permission_ids)
 
         return self.repository.save(role)
@@ -51,5 +58,10 @@ class RoleService:
         role = self.repository.get_by_id(role_id)
         if role is None:
             return False
+        if role.name in SYSTEM_ROLE_NAMES:
+            raise SystemRoleProtectedError(role.name)
         self.repository.delete(role)
         return True
+
+    def restore(self, role_id: int) -> Role | None:
+        return self.repository.restore(role_id)
