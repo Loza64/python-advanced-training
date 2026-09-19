@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_role_service, require_permissions
-from app.core.exceptions import DuplicateRoleNameError
 from app.mappers.role_mapper import RoleMapper
 from app.schemas.role import RoleCreate, RoleResponse, RoleUpdate
 from app.services.role_service import RoleService
@@ -16,10 +15,7 @@ router = APIRouter(prefix="/roles", tags=["Roles"])
     dependencies=[Depends(require_permissions("roles:create"))],
 )
 def create_role(data: RoleCreate, service: RoleService = Depends(get_role_service)):
-    try:
-        return RoleMapper.to_response(service.create(data))
-    except DuplicateRoleNameError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return RoleMapper.to_response(service.create(data))
 
 
 @router.get(
@@ -37,10 +33,7 @@ def list_roles(service: RoleService = Depends(get_role_service)):
     dependencies=[Depends(require_permissions("roles:read"))],
 )
 def get_role(role_id: int, service: RoleService = Depends(get_role_service)):
-    role = service.get(role_id)
-    if role is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
-    return RoleMapper.to_response(role)
+    return RoleMapper.to_response(service.get(role_id))
 
 
 @router.put(
@@ -49,13 +42,7 @@ def get_role(role_id: int, service: RoleService = Depends(get_role_service)):
     dependencies=[Depends(require_permissions("roles:update"))],
 )
 def update_role(role_id: int, data: RoleUpdate, service: RoleService = Depends(get_role_service)):
-    try:
-        role = service.update(role_id, data)
-    except DuplicateRoleNameError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    if role is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
-    return RoleMapper.to_response(role)
+    return RoleMapper.to_response(service.update(role_id, data))
 
 
 @router.delete(
@@ -64,5 +51,13 @@ def update_role(role_id: int, data: RoleUpdate, service: RoleService = Depends(g
     dependencies=[Depends(require_permissions("roles:delete"))],
 )
 def delete_role(role_id: int, service: RoleService = Depends(get_role_service)) -> None:
-    if not service.delete(role_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    service.delete(role_id)
+
+
+@router.post(
+    "/{role_id}/restore",
+    response_model=RoleResponse,
+    dependencies=[Depends(require_permissions("roles:delete"))],
+)
+def restore_role(role_id: int, service: RoleService = Depends(get_role_service)):
+    return RoleMapper.to_response(service.restore(role_id))

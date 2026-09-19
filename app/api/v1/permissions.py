@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from app.api.deps import get_permission_service, require_permissions
 from app.mappers.permission_mapper import PermissionMapper
@@ -7,9 +7,9 @@ from app.services.permission_service import PermissionService
 
 router = APIRouter(prefix="/permissions", tags=["Permissions"])
 
-# Nota: los permisos no se crean ni se eliminan vía API (no hay POST/DELETE).
-# Solo se listan, se consultan por id, y se actualiza su 'title'.
-# 'name' identifica al permiso y nunca es editable.
+# Nota: los permisos no se crean ni se eliminan vía API (no hay POST/DELETE),
+# y tampoco soportan restore. Solo se listan, se consultan por id, y se
+# actualiza su 'title'. 'name' identifica al permiso y nunca es editable.
 
 
 @router.get(
@@ -27,10 +27,7 @@ def list_permissions(service: PermissionService = Depends(get_permission_service
     dependencies=[Depends(require_permissions("permissions:read"))],
 )
 def get_permission(permission_id: int, service: PermissionService = Depends(get_permission_service)):
-    permission = service.get(permission_id)
-    if permission is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found")
-    return PermissionMapper.to_response(permission)
+    return PermissionMapper.to_response(service.get(permission_id))
 
 
 @router.put(
@@ -43,7 +40,4 @@ def update_permission(
     data: PermissionUpdate,
     service: PermissionService = Depends(get_permission_service),
 ):
-    permission = service.update(permission_id, data)
-    if permission is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found")
-    return PermissionMapper.to_response(permission)
+    return PermissionMapper.to_response(service.update(permission_id, data))

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.audit import AuditFieldsMixin
 from app.schemas.permission import PermissionResponse
 
 
@@ -18,7 +19,7 @@ class RoleUpdate(BaseModel):
     permission_ids: list[int] | None = None
 
 
-class RoleResponse(RoleBase):
+class RoleResponse(RoleBase, AuditFieldsMixin):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

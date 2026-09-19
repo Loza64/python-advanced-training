@@ -37,19 +37,19 @@ class RoleRepository:
 
     def create(self, role: Role) -> Role:
         self.db.add(role)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(role)
         return role
 
     def save(self, role: Role) -> Role:
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(role)
         return role
 
     def delete(self, role: Role) -> None:
         """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
         role.deleted_at = datetime.now(timezone.utc)
-        self.db.commit()
+        self.db.flush()
 
     def restore(self, role_id: int) -> Optional[Role]:
         """Revierte un borrado lógico. Devuelve None si no existe o si no
@@ -58,6 +58,6 @@ class RoleRepository:
         if role is None or role.deleted_at is None:
             return None
         role.deleted_at = None
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(role)
         return role

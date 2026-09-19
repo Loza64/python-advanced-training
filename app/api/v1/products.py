@@ -1,9 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import StringConstraints
-from app.api.deps import get_product_service
-from app.core.exceptions import CategoryNotFoundError
+from app.api.deps import get_product_service, require_permissions
 from app.mappers.product_mapper import ProductMapper
 from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
@@ -13,15 +12,21 @@ router = APIRouter(prefix="/products", tags=["Products"])
 SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(asc|desc)$")]
 
 
-@router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permissions("products:create"))],
+)
 def create_product(data: ProductCreate, service: ProductService = Depends(get_product_service)):
-    try:
-        return ProductMapper.to_response(service.create(data))
-    except CategoryNotFoundError as exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exception)) from exception
+    return ProductMapper.to_response(service.create(data))
 
 
-@router.get("", response_model=PaginatedResponse[ProductResponse])
+@router.get(
+    "",
+    response_model=PaginatedResponse[ProductResponse],
+    dependencies=[Depends(require_permissions("products:list"))],
+)
 def list_products(
     params: PaginationParams = Depends(),
     sort: list[SortItem] | None = Query(
@@ -53,26 +58,37 @@ def list_products(
     )
 
 
-@router.get("/{product_id}", response_model=ProductResponse)
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+    dependencies=[Depends(require_permissions("products:read"))],
+)
 def get_product(product_id: int, service: ProductService = Depends(get_product_service)):
-    product = service.get(product_id)
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return ProductMapper.to_response(product)
+    return ProductMapper.to_response(service.get(product_id))
 
 
-@router.put("/{product_id}", response_model=ProductResponse)
+@router.put(
+    "/{product_id}",
+    response_model=ProductResponse,
+    dependencies=[Depends(require_permissions("products:update"))],
+)
 def update_product(product_id: int, data: ProductUpdate, service: ProductService = Depends(get_product_service)):
-    try:
-        product = service.update(product_id, data)
-    except CategoryNotFoundError as exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exception)) from exception
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return ProductMapper.to_response(product)
+    return ProductMapper.to_response(service.update(product_id, data))
 
 
-@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permissions("products:delete"))],
+)
 def delete_product(product_id: int, service: ProductService = Depends(get_product_service)) -> None:
-    if not service.delete(product_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    service.delete(product_id)
+
+
+@router.post(
+    "/{product_id}/restore",
+    response_model=ProductResponse,
+    dependencies=[Depends(require_permissions("products:delete"))],
+)
+def restore_product(product_id: int, service: ProductService = Depends(get_product_service)):
+    return ProductMapper.to_response(service.restore(product_id))

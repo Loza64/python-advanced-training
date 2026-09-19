@@ -21,6 +21,7 @@ from app.core.exceptions import (
     PermissionDeniedError,
     PermissionNotFoundError,
     ProductCategoryValidationError,
+    ProductNotFoundError,
     RefreshTokenReuseDetectedError,
     RoleNotFoundError,
     SuperAdminAlreadyExistsError,
@@ -32,7 +33,7 @@ from app.core.exceptions import (
 )
 from app.core.logging import configure_logging
 from app.db.base import Base
-from app.db.seed import seed_super_admin
+from app.db.seed import run_seeders
 from app.db.session import SessionLocal, engine
 from app.middleware.product_category import ProductCategoryMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -100,12 +101,17 @@ app.add_middleware(ProductCategoryMiddleware)
 
 @app.on_event("startup")
 def run_seed() -> None:
-    """Ejecuta los seeders al arrancar la app. Es idempotente: seed_permissions
-    no duplica permisos existentes, y seed_admin no crea el admin si ya hay
-    usuarios en la base."""
+    """Ejecuta los seeders al arrancar la app (permisos, roles de sistema y
+    super_admin inicial). Es idempotente: no duplica permisos ni roles
+    existentes, y no crea un segundo super_admin. Usa su propia sesión (no
+    pasa por get_db), así que hace su propio commit/rollback."""
     db = SessionLocal()
     try:
-        seed_super_admin(db)
+        run_seeders(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -117,6 +123,7 @@ async def validation_exception_handler(_: Request, exception: RequestValidationE
 
 _NOT_FOUND_ERRORS = (
     CategoryNotFoundError,
+    ProductNotFoundError,
     UserNotFoundError,
     RoleNotFoundError,
     PermissionNotFoundError,

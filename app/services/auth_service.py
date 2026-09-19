@@ -35,8 +35,7 @@ class AuthService:
         return []
 
     def _issue_tokens(self, user: User, family_id: str | None = None) -> tuple[str, str]:
-        permissions = self._permissions_for(user)
-        access_token = create_access_token(user.id, permissions)
+        access_token = create_access_token(user.id)
 
         raw_refresh_token = secrets.token_urlsafe(64)
         refresh_token = RefreshToken(

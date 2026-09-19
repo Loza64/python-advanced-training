@@ -67,19 +67,19 @@ class UserRepository:
 
     def create(self, user: User) -> User:
         self.db.add(user)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(user)
         return user
 
     def save(self, user: User) -> User:
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(user)
         return user
 
     def delete(self, user: User) -> None:
         """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
         user.deleted_at = datetime.now(timezone.utc)
-        self.db.commit()
+        self.db.flush()
 
     def restore(self, user_id: int) -> Optional[User]:
         """Revierte un borrado lógico. Devuelve None si no existe o si no
@@ -88,6 +88,6 @@ class UserRepository:
         if user is None or user.deleted_at is None:
             return None
         user.deleted_at = None
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(user)
         return user

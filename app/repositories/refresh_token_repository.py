@@ -11,7 +11,7 @@ class RefreshTokenRepository:
 
     def create(self, refresh_token: RefreshToken) -> RefreshToken:
         self.db.add(refresh_token)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(refresh_token)
         return refresh_token
 
@@ -24,7 +24,7 @@ class RefreshTokenRepository:
         )
 
     def save(self, refresh_token: RefreshToken) -> RefreshToken:
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(refresh_token)
         return refresh_token
 
@@ -32,4 +32,4 @@ class RefreshTokenRepository:
         self.db.query(RefreshToken).filter(RefreshToken.family_id == family_id).update(
             {"revoked": True}, synchronize_session=False
         )
-        self.db.commit()
+        self.db.flush()

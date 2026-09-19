@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.audit import AuditFieldsMixin
 from app.schemas.category import CategoryResponse
 
 
@@ -27,7 +28,7 @@ class ProductUpdate(ProductBase):
     pass
 
 
-class ProductResponse(ProductBase):
+class ProductResponse(ProductBase, AuditFieldsMixin):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

@@ -20,9 +20,20 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 def get_db() -> Generator[Session, None, None]:
+    """Sesión por request con un único límite de transacción: los
+    repositorios solo hacen flush() (para obtener ids/defaults del server y
+    dejar los cambios visibles dentro de la misma transacción), y aquí se
+    hace commit una sola vez si el request termina bien, o rollback si algo
+    lanza una excepción. Así una operación que toca varios repositorios
+    (p. ej. AuthService.signup: crear usuario + crear refresh token) es
+    atómica en vez de ser dos commits independientes."""
     db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

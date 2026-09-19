@@ -23,11 +23,16 @@ def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
-def create_access_token(subject: int, permissions: list[str]) -> str:
+def create_access_token(subject: int) -> str:
+    """El access token solo carga el id del usuario (sub) — nada de
+    permisos ni otros datos de perfil. El RBAC (require_permissions) ya
+    resuelve los permisos consultando el rol del usuario en cada request,
+    así que no hay necesidad de "cachearlos" en el token, y evita que
+    queden permisos obsoletos válidos hasta que expire el token si el rol
+    cambia mientras tanto."""
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": str(subject),
-        "perms": permissions,
         "iat": now,
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         "type": "access",

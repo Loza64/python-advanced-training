@@ -32,6 +32,6 @@ class PermissionRepository:
         return perm
 
     def save(self, permission: Permission) -> Permission:
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(permission)
         return permission

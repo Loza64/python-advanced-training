@@ -43,19 +43,19 @@ class CategoryRepository:
 
     def add(self, category: Category) -> Category:
         self.session.add(category)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(category)
         return category
 
     def save(self, category: Category) -> Category:
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(category)
         return category
 
     def delete(self, category: Category) -> None:
         """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
         category.deleted_at = datetime.now(timezone.utc)
-        self.session.commit()
+        self.session.flush()
 
     def restore(self, category_id: int) -> Category | None:
         """Revierte un borrado lógico. Devuelve None si no existe o si no
@@ -64,6 +64,6 @@ class CategoryRepository:
         if category is None or category.deleted_at is None:
             return None
         category.deleted_at = None
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(category)
         return category

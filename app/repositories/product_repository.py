@@ -38,19 +38,19 @@ class ProductRepository:
 
     def add(self, product: Product) -> Product:
         self.session.add(product)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(product)
         return product
 
     def save(self, product: Product) -> Product:
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(product)
         return product
 
     def delete(self, product: Product) -> None:
         """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
         product.deleted_at = datetime.now(timezone.utc)
-        self.session.commit()
+        self.session.flush()
 
     def restore(self, product_id: int) -> Product | None:
         """Revierte un borrado lógico. Devuelve None si no existe o si no
@@ -59,6 +59,6 @@ class ProductRepository:
         if product is None or product.deleted_at is None:
             return None
         product.deleted_at = None
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(product)
         return product

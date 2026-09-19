@@ -1,6 +1,6 @@
 from app.models.category import Category
 from fastapi_pagination import Page, Params
-from app.core.exceptions import DuplicateCategoryNameError
+from app.core.exceptions import CategoryNotFoundError, DuplicateCategoryNameError
 from app.core.ports import CategoryRepositoryPort
 from app.mappers.category_mapper import CategoryMapper
 from app.schemas.category import CategoryCreate, CategoryUpdate
@@ -13,8 +13,11 @@ class CategoryService:
     def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[Category]:
         return self.repository.list(params, sort, search)
 
-    def get(self, category_id: int) -> Category | None:
-        return self.repository.get(category_id)
+    def get(self, category_id: int) -> Category:
+        category = self.repository.get(category_id)
+        if category is None:
+            raise CategoryNotFoundError(category_id)
+        return category
 
     def create(self, data: CategoryCreate) -> Category:
         existing = self.repository.get_by_name(data.name.strip())
@@ -22,10 +25,10 @@ class CategoryService:
             raise DuplicateCategoryNameError(data.name)
         return self.repository.add(CategoryMapper.to_model(data))
 
-    def update(self, category_id: int, data: CategoryUpdate) -> Category | None:
+    def update(self, category_id: int, data: CategoryUpdate) -> Category:
         category = self.repository.get(category_id)
         if category is None:
-            return None
+            raise CategoryNotFoundError(category_id)
 
         candidate_name = data.name.strip()
         if candidate_name and candidate_name.lower() != category.name.lower():
@@ -37,12 +40,14 @@ class CategoryService:
             setattr(category, field, value)
         return self.repository.save(category)
 
-    def delete(self, category_id: int) -> bool:
+    def delete(self, category_id: int) -> None:
         category = self.repository.get(category_id)
         if category is None:
-            return False
+            raise CategoryNotFoundError(category_id)
         self.repository.delete(category)
-        return True
 
-    def restore(self, category_id: int) -> Category | None:
-        return self.repository.restore(category_id)
+    def restore(self, category_id: int) -> Category:
+        category = self.repository.restore(category_id)
+        if category is None:
+            raise CategoryNotFoundError(category_id)
+        return category
