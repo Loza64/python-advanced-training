@@ -14,8 +14,6 @@ class ProductRepository:
         self.session = session
 
     def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[Product]:
-        # category es requerido en ProductResponse, así que se carga siempre
-        # con joinedload (1 solo query extra, en vez de N+1 lazy loads).
         query = (
             select(Product)
             .options(joinedload(Product.category))
@@ -47,9 +45,6 @@ class ProductRepository:
     def add(self, product: Product) -> Product:
         self.session.add(product)
         self.session.flush()
-        # No usamos session.refresh(): con lazy="raise_on_sql" expiraría
-        # category (nunca cargada tras un insert) y explotaría al serializar.
-        # Releemos con joinedload; misma transacción, así que ya ve la fila.
         return self.get(product.id)
 
     def save(self, product: Product) -> Product:

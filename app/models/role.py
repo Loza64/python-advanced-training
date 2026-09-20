@@ -12,10 +12,6 @@ class Role(BaseEntity):
     __table_args__ = (UniqueConstraint("name", name="uq_roles_name"),)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    # raise_on_sql: nunca se dispara un SELECT lazy implícito para cargar
-    # permissions (evita N+1 y el patrón "olvidé el eager load"). Cualquier
-    # código que necesite permissions debe pedirlo explícitamente vía
-    # `joinedload(Role.permissions)` en el repositorio.
     permissions: Mapped[List["Permission"]] = relationship(
         secondary=role_permissions, lazy="raise_on_sql"
     )

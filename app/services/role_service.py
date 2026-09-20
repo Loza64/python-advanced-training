@@ -44,10 +44,6 @@ class RoleService:
         return self.repository.create(role)
 
     def update(self, role_id: int, data: RoleUpdate) -> Role:
-        # Cargamos permissions siempre: si luego se reasigna la lista
-        # (data.permissions is not None), SQLAlchemy necesita leer el valor
-        # actual para calcular el diff antes de sobreescribirlo, y con
-        # lazy="raise_on_sql" esa lectura implícita ya no se permite.
         role = self.repository.get_by_id(role_id, with_permissions=True)
         if role is None:
             raise RoleNotFoundError(role_id)
@@ -69,11 +65,6 @@ class RoleService:
             role.active = data.active
 
         if data.permissions is not None:
-            # Bug preexistente: llamaba a _get_permissions_by_ids con objetos
-            # RoleReference (no ints), lo que rompía con
-            # "unhashable type: 'RoleReference'" en cualquier PUT /roles/{id}
-            # que reasignara permisos. _get_permissions_by_references sí
-            # desempaqueta el id de cada referencia (igual que en create()).
             role.permissions = self._get_permissions_by_references(data.permissions)
 
         return self.repository.save(role)
@@ -110,9 +101,6 @@ class RoleService:
                     if name in permissions_by_name
                 ]
 
-            # with_permissions=True: el branch de abajo puede reasignar
-            # role.permissions, y esa asignación necesita el valor actual
-            # ya cargado (ver nota en update()).
             role = self.repository.get_by_name(role_name, with_permissions=True)
             if role is None:
                 role = self.repository.create(

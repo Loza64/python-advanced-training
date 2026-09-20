@@ -19,10 +19,6 @@ class User(BaseEntity):
     role_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("roles.id", ondelete="SET NULL"), nullable=True
     )
-    # raise_on_sql: role solo se carga cuando se pide explícitamente vía
-    # `joinedload(User.role)` en el repositorio (es 1:1, por eso joined y no
-    # select). Evita que un acceso accidental a user.role dispare un SELECT
-    # extra por usuario.
     role: Mapped[Optional["Role"]] = relationship(lazy="raise_on_sql")
 
     @property

@@ -25,10 +25,6 @@ class RoleRepository:
     def create(self, role: Role) -> Role:
         self.db.add(role)
         self.db.flush()
-        # No usamos db.refresh(role): con lazy="raise_on_sql", refresh()
-        # expira (y luego intentaría relanzar el SELECT de) permissions,
-        # aunque ya lo hayamos poblado en memoria. Releemos con eager load
-        # explícito para devolver el objeto completo de forma segura.
         return self._get_with_permissions(role.id)
 
     def save(self, role: Role) -> Role:
@@ -48,9 +44,6 @@ class RoleRepository:
         return self._get_with_permissions(role_id)
 
     def _apply_loading(self, query, with_permissions: bool):
-        # Eager load explícito con joinedload, igual que ProductRepository
-        # hace con Product.category: permissions es lazy="raise_on_sql" en
-        # el modelo, así que hay que pedirlo siempre que se vaya a usar.
         if with_permissions:
             return query.options(joinedload(Role.permissions))
         return query

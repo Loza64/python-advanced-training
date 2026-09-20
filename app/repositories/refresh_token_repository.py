@@ -22,10 +22,6 @@ class RefreshTokenRepository:
     ) -> Optional[RefreshToken]:
         query = self.db.query(RefreshToken).filter(RefreshToken.token == token_hash)
         if with_user_permissions:
-            # RefreshToken.user ya es lazy="joined" (siempre se carga), pero
-            # su role y permissions son lazy="raise_on_sql": si el llamador
-            # los necesita (p.ej. para armar permission_names en /refresh),
-            # hay que encadenar el joinedload explícitamente.
             query = query.options(
                 joinedload(RefreshToken.user).joinedload(User.role).joinedload(Role.permissions)
             )

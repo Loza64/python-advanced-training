@@ -18,10 +18,6 @@ class Product(BaseEntity):
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
-    # raise_on_sql: category es requerido en ProductResponse (incluso en
-    # listados), así que el repositorio SIEMPRE debe pedirlo con joinedload.
-    # Este flag convierte un N+1 silencioso en un error explícito si alguna
-    # query nueva se olvida de hacerlo.
     category: Mapped[Category] = relationship(
         back_populates="products", lazy="raise_on_sql"
     )
