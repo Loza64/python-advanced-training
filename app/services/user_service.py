@@ -2,7 +2,6 @@ import logging
 
 from fastapi_pagination import Page, Params
 
-from app.core.config import settings
 from app.core.constants import SUPER_ADMIN_ROLE_NAME
 from app.core.exceptions import (
     EmailAlreadyExistsError,
@@ -12,28 +11,40 @@ from app.core.exceptions import (
     UserNotFoundError,
     UsernameAlreadyExistsError,
 )
-from app.core.ports import RoleRepositoryProtocol, UserRepositoryProtocol
-from app.core.security import hash_password
+from app.core.ports import PasswordHasherPort, RoleRepositoryProtocol, UserRepositoryProtocol
 from app.models.role import Role
 from app.models.user import User
+from app.schemas.role import RoleReference
 from app.schemas.user import UserCreate, UserUpdate
 
 logger = logging.getLogger(__name__)
 
 
 class UserService:
-    def __init__(self, repository: UserRepositoryProtocol, role_repository: RoleRepositoryProtocol) -> None:
+    def __init__(
+        self,
+        repository: UserRepositoryProtocol,
+        role_repository: RoleRepositoryProtocol,
+        password_hasher: PasswordHasherPort,
+    ) -> None:
         self.repository = repository
         self.role_repository = role_repository
+        self.password_hasher = password_hasher
 
     def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[User]:
-        return self.repository.list(params, sort, search)
+        return self.repository.list(params, sort, search, with_role=True)
 
     def get(self, user_id: int) -> User:
-        user = self.repository.get_by_id(user_id)
+        user = self.repository.get_by_id(user_id, with_role=True)
         if user is None:
             raise UserNotFoundError(user_id)
         return user
+
+    def find_by_id(self, user_id: int, with_permissions: bool = False) -> User | None:
+        return self.repository.get_by_id(user_id, with_permissions=with_permissions)
+
+    def find_by_username(self, username: str, with_permissions: bool = False) -> User | None:
+        return self.repository.get_by_username(username, with_permissions=with_permissions)
 
     def create(self, data: UserCreate) -> User:
         if self.repository.get_by_username(data.username) is not None:
@@ -41,10 +52,11 @@ class UserService:
         if self.repository.get_by_email(data.email) is not None:
             raise EmailAlreadyExistsError(data.email)
 
-        if data.role_id is not None:
-            role = self.role_repository.get_by_id(data.role_id)
+        role_id = data.role.id if data.role is not None else None
+        if role_id is not None:
+            role = self.role_repository.get_by_id(role_id)
             if role is None:
-                raise RoleNotFoundError(data.role_id)
+                raise RoleNotFoundError(role_id)
             if self._is_super_admin_role_id(role.id) and self.repository.exists_with_role(role.id):
                 raise SuperAdminAlreadyExistsError()
 
@@ -53,8 +65,8 @@ class UserService:
             name=data.name,
             surname=data.surname,
             email=data.email,
-            password=hash_password(data.password),
-            role_id=data.role_id,
+            password=self.password_hasher.hash(data.password),
+            role_id=role_id,
             blocked=False,
         )
         return self.repository.create(user)
@@ -70,15 +82,15 @@ class UserService:
                 raise EmailAlreadyExistsError(data.email)
             user.email = data.email
 
-        if data.role_id is not None:
-            role = self.role_repository.get_by_id(data.role_id)
+        if data.role is not None:
+            role = self.role_repository.get_by_id(data.role.id)
             if role is None:
-                raise RoleNotFoundError(data.role_id)
+                raise RoleNotFoundError(data.role.id)
             if self._is_super_admin_role_id(role.id) and self.repository.exists_with_role(
                 role.id, exclude_user_id=user_id
             ):
                 raise SuperAdminAlreadyExistsError()
-            user.role_id = data.role_id
+            user.role_id = role.id
 
         if data.name is not None:
             user.name = data.name
@@ -87,7 +99,7 @@ class UserService:
         if data.blocked is not None:
             user.blocked = data.blocked
         if data.password:
-            user.password = hash_password(data.password)
+            user.password = self.password_hasher.hash(data.password)
 
         return self.repository.save(user)
 
@@ -106,39 +118,22 @@ class UserService:
         return user
 
     def _is_super_admin_role_id(self, role_id: int) -> bool:
-        """Único punto de verdad para identificar el rol super_admin: se
-        resuelve su id (el nombre está protegido y nunca cambia, ver
-        RoleService.update) y se compara solo por id, no por strings
-        repetidos en cada validación."""
         super_admin_role = self.role_repository.get_by_name(SUPER_ADMIN_ROLE_NAME)
         return super_admin_role is not None and super_admin_role.id == role_id
 
-    def seed_super_admin(self, super_admin_role: Role) -> User | None:
-        """Crea el usuario super_admin inicial (único) con los datos
-        definidos en el .env. Es idempotente: no crea un segundo super_admin.
-        La validación de unicidad la aplica `create()`, que es la misma ruta
-        usada por la API (única fuente de verdad para esa regla)."""
+    def seed_super_admin(self, super_admin_role: Role, data: UserCreate) -> User | None:
         if self.repository.exists_with_role(super_admin_role.id):
-            return None  # ya existe un usuario con rol super_admin
+            return None
 
         try:
-            return self.create(
-                UserCreate(
-                    username=settings.SUPER_ADMIN_USERNAME,
-                    name=settings.SUPER_ADMIN_NAME,
-                    surname=settings.SUPER_ADMIN_SURNAME,
-                    email=settings.SUPER_ADMIN_EMAIL,
-                    password=settings.SUPER_ADMIN_PASSWORD,
-                    role_id=super_admin_role.id,
-                )
-            )
+            return self.create(data.model_copy(update={"role": RoleReference(id=super_admin_role.id)}))
         except (UsernameAlreadyExistsError, EmailAlreadyExistsError, SuperAdminAlreadyExistsError) as exc:
             logger.warning(
                 "No se creó el super_admin (username='%s', email='%s'): %s. "
                 "Asígnale el rol super_admin manualmente si es correcto, o cambia "
                 "SUPER_ADMIN_USERNAME/SUPER_ADMIN_EMAIL en el .env.",
-                settings.SUPER_ADMIN_USERNAME,
-                settings.SUPER_ADMIN_EMAIL,
+                data.username,
+                data.email,
                 exc,
             )
             return None

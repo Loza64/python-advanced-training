@@ -7,10 +7,6 @@ from app.schemas.permission import PermissionUpdate
 
 
 class PermissionService:
-    """Los permisos no se crean ni se eliminan vía API: solo se listan,
-    se consultan y se actualiza su 'title' (el 'name' identifica al permiso
-    y no es editable). Tampoco se soportan borrado lógico ni restore."""
-
     def __init__(self, repository: PermissionRepositoryProtocol) -> None:
         self.repository = repository
 
@@ -31,6 +27,4 @@ class PermissionService:
         return self.repository.save(permission)
 
     def seed_defaults(self, definitions: list[tuple[str, str]]) -> list[Permission]:
-        """Crea (si no existen) los permisos base del sistema. Idempotente:
-        cada permiso se busca por 'name' y solo se crea si no existe."""
         return [self.repository.get_or_create(name, title) for name, title in definitions]

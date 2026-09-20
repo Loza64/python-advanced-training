@@ -2,7 +2,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import StringConstraints
-from app.api.deps import get_product_service, require_permissions
+from app.api.auth_deps import require_permissions
+from app.api.deps import get_product_service
+from app.core.permissions import (
+    CREATE_PRODUCT,
+    DELETE_PRODUCT,
+    LIST_PRODUCTS,
+    READ_PRODUCT,
+    UPDATE_PRODUCT,
+)
 from app.mappers.product_mapper import ProductMapper
 from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
@@ -16,7 +24,7 @@ SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(a
     "",
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permissions("products:create"))],
+    dependencies=[Depends(require_permissions(CREATE_PRODUCT))],
 )
 def create_product(data: ProductCreate, service: ProductService = Depends(get_product_service)):
     return ProductMapper.to_response(service.create(data))
@@ -25,7 +33,7 @@ def create_product(data: ProductCreate, service: ProductService = Depends(get_pr
 @router.get(
     "",
     response_model=PaginatedResponse[ProductResponse],
-    dependencies=[Depends(require_permissions("products:list"))],
+    dependencies=[Depends(require_permissions(LIST_PRODUCTS))],
 )
 def list_products(
     params: PaginationParams = Depends(),
@@ -61,7 +69,7 @@ def list_products(
 @router.get(
     "/{product_id}",
     response_model=ProductResponse,
-    dependencies=[Depends(require_permissions("products:read"))],
+    dependencies=[Depends(require_permissions(READ_PRODUCT))],
 )
 def get_product(product_id: int, service: ProductService = Depends(get_product_service)):
     return ProductMapper.to_response(service.get(product_id))
@@ -70,7 +78,7 @@ def get_product(product_id: int, service: ProductService = Depends(get_product_s
 @router.put(
     "/{product_id}",
     response_model=ProductResponse,
-    dependencies=[Depends(require_permissions("products:update"))],
+    dependencies=[Depends(require_permissions(UPDATE_PRODUCT))],
 )
 def update_product(product_id: int, data: ProductUpdate, service: ProductService = Depends(get_product_service)):
     return ProductMapper.to_response(service.update(product_id, data))
@@ -79,7 +87,7 @@ def update_product(product_id: int, data: ProductUpdate, service: ProductService
 @router.delete(
     "/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permissions("products:delete"))],
+    dependencies=[Depends(require_permissions(DELETE_PRODUCT))],
 )
 def delete_product(product_id: int, service: ProductService = Depends(get_product_service)) -> None:
     service.delete(product_id)
@@ -88,7 +96,7 @@ def delete_product(product_id: int, service: ProductService = Depends(get_produc
 @router.post(
     "/{product_id}/restore",
     response_model=ProductResponse,
-    dependencies=[Depends(require_permissions("products:delete"))],
+    dependencies=[Depends(require_permissions(DELETE_PRODUCT))],
 )
 def restore_product(product_id: int, service: ProductService = Depends(get_product_service)):
     return ProductMapper.to_response(service.restore(product_id))

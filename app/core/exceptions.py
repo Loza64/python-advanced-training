@@ -1,9 +1,9 @@
 class AppError(Exception):
-    """Base class for application-level business errors."""
+    pass
 
 
 class DomainError(AppError):
-    """Base class for business/domain validation errors."""
+    pass
 
 
 class CategoryNotFoundError(DomainError):
@@ -29,13 +29,11 @@ class ProductNotFoundError(DomainError):
         super().__init__(f"Product {product_id} not found")
 
 
-# --- Auth / RBAC / Refresh token ---
-
 class InvalidCredentialsError(AppError):
     pass
 
 
-class UserBlockedError(AppError):
+class InvalidAccessTokenError(AppError):
     pass
 
 
@@ -44,15 +42,16 @@ class InvalidRefreshTokenError(AppError):
 
 
 class RefreshTokenReuseDetectedError(AppError):
-    """Se detectó reuso de un refresh token -> se revoca toda la family."""
+    pass
+
+
+class UserBlockedError(AppError):
     pass
 
 
 class PermissionDeniedError(AppError):
     pass
 
-
-# --- Users ---
 
 class UserNotFoundError(DomainError):
     def __init__(self, user_id: int) -> None:
@@ -72,8 +71,6 @@ class EmailAlreadyExistsError(DomainError):
         super().__init__(f"Email '{email}' already exists")
 
 
-# --- Roles ---
-
 class RoleNotFoundError(DomainError):
     def __init__(self, role_id: int) -> None:
         self.role_id = role_id
@@ -87,15 +84,10 @@ class DuplicateRoleNameError(DomainError):
 
 
 class SystemRoleProtectedError(DomainError):
-    """Un rol de sistema (super_admin, admin, client) no se puede renombrar,
-    borrar, desactivar (super_admin) ni perder permisos (super_admin)."""
-
     def __init__(self, name: str) -> None:
         self.name = name
         super().__init__(f"Role '{name}' is a protected system role")
 
-
-# --- Super admin ---
 
 class SuperAdminAlreadyExistsError(DomainError):
     def __init__(self) -> None:
@@ -106,8 +98,6 @@ class SuperAdminCannotBeDeletedError(DomainError):
     def __init__(self) -> None:
         super().__init__("The super_admin user can never be deleted")
 
-
-# --- Permissions ---
 
 class PermissionNotFoundError(DomainError):
     def __init__(self, permission_id: int) -> None:

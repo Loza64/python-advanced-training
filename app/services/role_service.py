@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from app.core.constants import SUPER_ADMIN_ROLE_NAME, SYSTEM_ROLE_NAMES
-from app.core.exceptions import DuplicateRoleNameError, RoleNotFoundError, SystemRoleProtectedError
+from app.core.exceptions import (
+    DuplicateRoleNameError,
+    PermissionNotFoundError,
+    RoleNotFoundError,
+    SystemRoleProtectedError,
+)
 from app.core.ports import PermissionRepositoryProtocol, RoleRepositoryProtocol
 from app.models.permission import Permission
 from app.models.role import Role
@@ -9,7 +14,11 @@ from app.schemas.role import RoleCreate, RoleUpdate
 
 
 class RoleService:
-    def __init__(self, repository: RoleRepositoryProtocol, permission_repository: PermissionRepositoryProtocol) -> None:
+    def __init__(
+        self,
+        repository: RoleRepositoryProtocol,
+        permission_repository: PermissionRepositoryProtocol,
+    ) -> None:
         self.repository = repository
         self.permission_repository = permission_repository
 
@@ -17,7 +26,7 @@ class RoleService:
         return self.repository.list_all()
 
     def get(self, role_id: int) -> Role:
-        role = self.repository.get_by_id(role_id)
+        role = self.repository.get_by_id(role_id, with_permissions=True)
         if role is None:
             raise RoleNotFoundError(role_id)
         return role
@@ -30,24 +39,27 @@ class RoleService:
         role = Role(
             name=name,
             active=data.active,
-            permissions=self.permission_repository.get_by_ids(data.permission_ids),
+            permissions=self._get_permissions_by_references(data.permissions),
         )
         return self.repository.create(role)
 
     def update(self, role_id: int, data: RoleUpdate) -> Role:
-        role = self.repository.get_by_id(role_id)
+        # Cargamos permissions siempre: si luego se reasigna la lista
+        # (data.permissions is not None), SQLAlchemy necesita leer el valor
+        # actual para calcular el diff antes de sobreescribirlo, y con
+        # lazy="raise_on_sql" esa lectura implícita ya no se permite.
+        role = self.repository.get_by_id(role_id, with_permissions=True)
         if role is None:
             raise RoleNotFoundError(role_id)
 
         if role.name == SUPER_ADMIN_ROLE_NAME:
-            # El rol super_admin es inmutable: ni nombre, ni active, ni
-            # permisos se pueden tocar vía API, sin importar qué venga en el payload.
             raise SystemRoleProtectedError(role.name)
 
         if data.name is not None:
             candidate = data.name.strip()
             if role.name in SYSTEM_ROLE_NAMES and candidate != role.name:
                 raise SystemRoleProtectedError(role.name)
+            
             existing = self.repository.get_by_name(candidate)
             if existing is not None and existing.id != role_id:
                 raise DuplicateRoleNameError(candidate)
@@ -56,8 +68,13 @@ class RoleService:
         if data.active is not None:
             role.active = data.active
 
-        if data.permission_ids is not None:
-            role.permissions = self.permission_repository.get_by_ids(data.permission_ids)
+        if data.permissions is not None:
+            # Bug preexistente: llamaba a _get_permissions_by_ids con objetos
+            # RoleReference (no ints), lo que rompía con
+            # "unhashable type: 'RoleReference'" en cualquier PUT /roles/{id}
+            # que reasignara permisos. _get_permissions_by_references sí
+            # desempaqueta el id de cada referencia (igual que en create()).
+            role.permissions = self._get_permissions_by_references(data.permissions)
 
         return self.repository.save(role)
 
@@ -80,24 +97,27 @@ class RoleService:
         permissions: list[Permission],
         role_permissions: dict[str, list[str] | None],
     ) -> dict[str, Role]:
-        """Crea (si no existen) los roles de sistema definidos en
-        `role_permissions`. Es idempotente. Un valor `None` en
-        `role_permissions` significa "todos los permisos existentes", y se
-        resincroniza en cada corrida para que ese rol (super_admin) nunca se
-        quede atrás si en el futuro se agregan más permisos al sistema."""
         permissions_by_name = {permission.name: permission for permission in permissions}
         roles: dict[str, Role] = {}
 
         for role_name, permission_names in role_permissions.items():
-            role_perms = (
-                list(permissions_by_name.values())
-                if permission_names is None
-                else [permissions_by_name[name] for name in permission_names if name in permissions_by_name]
-            )
+            if permission_names is None:
+                role_perms = list(permissions_by_name.values())
+            else:
+                role_perms = [
+                    permissions_by_name[name]
+                    for name in permission_names
+                    if name in permissions_by_name
+                ]
 
-            role = self.repository.get_by_name(role_name)
+            # with_permissions=True: el branch de abajo puede reasignar
+            # role.permissions, y esa asignación necesita el valor actual
+            # ya cargado (ver nota en update()).
+            role = self.repository.get_by_name(role_name, with_permissions=True)
             if role is None:
-                role = self.repository.create(Role(name=role_name, active=True, permissions=role_perms))
+                role = self.repository.create(
+                    Role(name=role_name, active=True, permissions=role_perms)
+                )
             elif permission_names is None:
                 role.permissions = role_perms
                 role = self.repository.save(role)
@@ -105,3 +125,18 @@ class RoleService:
             roles[role_name] = role
 
         return roles
+
+    def _get_permissions_by_references(self, references: list) -> list[Permission]:
+        ids = [ref.id for ref in references]
+        return self._get_permissions_by_ids(ids)
+
+    def _get_permissions_by_ids(self, ids: list[int]) -> list[Permission]:
+        unique_ids = list(dict.fromkeys(ids))
+        permissions = self.permission_repository.get_by_ids(unique_ids)
+
+        found_ids = {permission.id for permission in permissions}
+        for permission_id in unique_ids:
+            if permission_id not in found_ids:
+                raise PermissionNotFoundError(permission_id)
+
+        return permissions

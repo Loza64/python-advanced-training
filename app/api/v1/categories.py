@@ -2,7 +2,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import StringConstraints
-from app.api.deps import get_category_service, require_permissions
+from app.api.auth_deps import require_permissions
+from app.api.deps import get_category_service
+from app.core.permissions import (
+    CREATE_CATEGORY,
+    DELETE_CATEGORY,
+    LIST_CATEGORIES,
+    READ_CATEGORY,
+    UPDATE_CATEGORY,
+)
 from app.mappers.category_mapper import CategoryMapper
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
 from app.schemas.pagination import PaginatedResponse, PaginationMeta, PaginationParams
@@ -16,7 +24,7 @@ SortItem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*,(a
     "",
     response_model=CategoryResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permissions("categories:create"))],
+    dependencies=[Depends(require_permissions(CREATE_CATEGORY))],
 )
 def create_category(data: CategoryCreate, service: CategoryService = Depends(get_category_service)):
     return CategoryMapper.to_response(service.create(data))
@@ -25,7 +33,7 @@ def create_category(data: CategoryCreate, service: CategoryService = Depends(get
 @router.get(
     "",
     response_model=PaginatedResponse[CategoryResponse],
-    dependencies=[Depends(require_permissions("categories:list"))],
+    dependencies=[Depends(require_permissions(LIST_CATEGORIES))],
 )
 def list_categories(
     params: PaginationParams = Depends(),
@@ -61,7 +69,7 @@ def list_categories(
 @router.get(
     "/{category_id}",
     response_model=CategoryResponse,
-    dependencies=[Depends(require_permissions("categories:read"))],
+    dependencies=[Depends(require_permissions(READ_CATEGORY))],
 )
 def get_category(category_id: int, service: CategoryService = Depends(get_category_service)):
     return CategoryMapper.to_response(service.get(category_id))
@@ -70,7 +78,7 @@ def get_category(category_id: int, service: CategoryService = Depends(get_catego
 @router.put(
     "/{category_id}",
     response_model=CategoryResponse,
-    dependencies=[Depends(require_permissions("categories:update"))],
+    dependencies=[Depends(require_permissions(UPDATE_CATEGORY))],
 )
 def update_category(category_id: int, data: CategoryUpdate, service: CategoryService = Depends(get_category_service)):
     return CategoryMapper.to_response(service.update(category_id, data))
@@ -79,7 +87,7 @@ def update_category(category_id: int, data: CategoryUpdate, service: CategorySer
 @router.delete(
     "/{category_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permissions("categories:delete"))],
+    dependencies=[Depends(require_permissions(DELETE_CATEGORY))],
 )
 def delete_category(category_id: int, service: CategoryService = Depends(get_category_service)) -> None:
     service.delete(category_id)
@@ -88,7 +96,7 @@ def delete_category(category_id: int, service: CategoryService = Depends(get_cat
 @router.post(
     "/{category_id}/restore",
     response_model=CategoryResponse,
-    dependencies=[Depends(require_permissions("categories:delete"))],
+    dependencies=[Depends(require_permissions(DELETE_CATEGORY))],
 )
 def restore_category(category_id: int, service: CategoryService = Depends(get_category_service)):
     return CategoryMapper.to_response(service.restore(category_id))

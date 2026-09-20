@@ -13,5 +13,4 @@ class UserMapper:
 
     @staticmethod
     def to_profile_response(user: User) -> ProfileResponse:
-        """Para GET /auth/me: sin campos de auditoría, a diferencia de to_response()."""
         return ProfileResponse.model_validate(user)

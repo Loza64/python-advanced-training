@@ -16,5 +16,9 @@ class Category(BaseEntity):
 
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    products: Mapped[list[Product]] = relationship(back_populates="category")
+    # raise_on_sql: products nunca se necesita en las respuestas actuales;
+    # si algún día se requiere, debe pedirse con eager load explícito.
+    products: Mapped[list[Product]] = relationship(
+        back_populates="category", lazy="raise_on_sql"
+    )
     

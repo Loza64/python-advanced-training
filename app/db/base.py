@@ -10,11 +10,6 @@ class Base(DeclarativeBase):
 
 
 class SoftDeleteMixin:
-    """Agrega borrado lógico. deleted_at=None significa 'activo'; cualquier
-    timestamp significa 'borrado'. Los repositorios son responsables de
-    filtrar deleted_at IS NULL en sus queries normales, y de exponer un
-    restore() que lo vuelva a poner en None."""
-
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )

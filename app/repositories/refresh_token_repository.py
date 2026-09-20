@@ -3,6 +3,8 @@ from typing import Optional
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.refresh_token import RefreshToken
+from app.models.role import Role
+from app.models.user import User
 
 
 class RefreshTokenRepository:
@@ -15,13 +17,19 @@ class RefreshTokenRepository:
         self.db.refresh(refresh_token)
         return refresh_token
 
-    def get_by_token_hash(self, token_hash: str) -> Optional[RefreshToken]:
-        return (
-            self.db.query(RefreshToken)
-            .options(joinedload(RefreshToken.user))
-            .filter(RefreshToken.token == token_hash)
-            .first()
-        )
+    def get_by_token_hash(
+        self, token_hash: str, with_user_permissions: bool = False
+    ) -> Optional[RefreshToken]:
+        query = self.db.query(RefreshToken).filter(RefreshToken.token == token_hash)
+        if with_user_permissions:
+            # RefreshToken.user ya es lazy="joined" (siempre se carga), pero
+            # su role y permissions son lazy="raise_on_sql": si el llamador
+            # los necesita (p.ej. para armar permission_names en /refresh),
+            # hay que encadenar el joinedload explícitamente.
+            query = query.options(
+                joinedload(RefreshToken.user).joinedload(User.role).joinedload(Role.permissions)
+            )
+        return query.first()
 
     def save(self, refresh_token: RefreshToken) -> RefreshToken:
         self.db.flush()
@@ -33,3 +41,6 @@ class RefreshTokenRepository:
             {"revoked": True}, synchronize_session=False
         )
         self.db.flush()
+
+    def commit(self) -> None:
+        self.db.commit()

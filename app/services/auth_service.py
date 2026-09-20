@@ -1,128 +1,80 @@
-import json
-import secrets
-import uuid
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 
-from app.core.config import settings
-from app.core.exceptions import (
-    EmailAlreadyExistsError,
-    InvalidCredentialsError,
-    InvalidRefreshTokenError,
-    RefreshTokenReuseDetectedError,
-    UserBlockedError,
-    UsernameAlreadyExistsError,
-)
-from app.core.ports import RefreshTokenRepositoryProtocol, UserRepositoryProtocol
-from app.core.security import create_access_token, hash_password, hash_token, verify_password
-from app.models.refresh_token import RefreshToken
+from app.core.exceptions import InvalidAccessTokenError, InvalidCredentialsError, UserBlockedError
+from app.core.ports import AccessTokenPort, PasswordHasherPort
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, SignupRequest
+from app.schemas.auth import LoginRequest, SignupRequest
+from app.schemas.user import UserCreate
+from app.services.refresh_token_service import RefreshTokenService
+from app.services.user_service import UserService
+
+
+@dataclass(frozen=True)
+class AuthResult:
+    user: User
+    access_token: str
+    refresh_token: str
 
 
 class AuthService:
     def __init__(
         self,
-        user_repository: UserRepositoryProtocol,
-        refresh_token_repository: RefreshTokenRepositoryProtocol,
+        user_service: UserService,
+        refresh_token_service: RefreshTokenService,
+        password_hasher: PasswordHasherPort,
+        access_tokens: AccessTokenPort,
     ) -> None:
-        self.user_repository = user_repository
-        self.refresh_token_repository = refresh_token_repository
+        self.user_service = user_service
+        self.refresh_token_service = refresh_token_service
+        self.password_hasher = password_hasher
+        self.access_tokens = access_tokens
 
-    @staticmethod
-    def _permissions_for(user: User) -> list[str]:
-        if user.role and user.role.active:
-            return [permission.name for permission in user.role.permissions]
-        return []
+    def signup(self, payload: SignupRequest) -> AuthResult:
+        user = self.user_service.create(UserCreate.model_validate(payload.model_dump()))
+        return self._start_session(user)
 
-    def _issue_tokens(self, user: User, family_id: str | None = None) -> tuple[str, str]:
-        access_token = create_access_token(user.id)
+    def login(self, payload: LoginRequest) -> AuthResult:
+        user = self._authenticate(payload.username, payload.password)
+        return self._start_session(user)
 
-        raw_refresh_token = secrets.token_urlsafe(64)
-        refresh_token = RefreshToken(
-            token=hash_token(raw_refresh_token),
-            family_id=family_id or str(uuid.uuid4()),
-            used=False,
-            revoked=False,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-            user_id=user.id,
+    def refresh(self, raw_refresh_token: str) -> AuthResult:
+        stored = self.refresh_token_service.get_valid(
+            raw_refresh_token,
+            with_user_permissions=True,
         )
-        self.refresh_token_repository.create(refresh_token)
-        return access_token, raw_refresh_token
-
-    def _build_response(self, user: User, access_token: str, raw_refresh_token: str) -> AuthResponse:
-        data = json.dumps(
-            {
-                "id": user.id,
-                "username": user.username,
-                "name": user.name,
-                "surname": user.surname,
-                "email": user.email,
-                "role": user.role.name if user.role else None,
-                "permissions": self._permissions_for(user),
-            }
-        )
-        return AuthResponse(token=access_token, refreshToken=raw_refresh_token, data=data)
-
-    def signup(self, payload: SignupRequest) -> AuthResponse:
-        if self.user_repository.get_by_username(payload.username) is not None:
-            raise UsernameAlreadyExistsError(payload.username)
-        if self.user_repository.get_by_email(payload.email) is not None:
-            raise EmailAlreadyExistsError(payload.email)
-
-        user = User(
-            username=payload.username,
-            name=payload.name,
-            surname=payload.surname,
-            email=payload.email,
-            password=hash_password(payload.password),
-            blocked=False,
-        )
-        user = self.user_repository.create(user)
-
-        access_token, raw_refresh_token = self._issue_tokens(user)
-        return self._build_response(user, access_token, raw_refresh_token)
-
-    def login(self, payload: LoginRequest) -> AuthResponse:
-        user = self.user_repository.get_by_username(payload.username)
-        if user is None or not verify_password(payload.password, user.password):
-            raise InvalidCredentialsError("Invalid username or password")
-        if user.blocked:
-            raise UserBlockedError("User is blocked")
-
-        access_token, raw_refresh_token = self._issue_tokens(user)
-        return self._build_response(user, access_token, raw_refresh_token)
-
-    def refresh(self, raw_refresh_token: str) -> AuthResponse:
-        token_hash = hash_token(raw_refresh_token)
-        stored = self.refresh_token_repository.get_by_token_hash(token_hash)
-
-        if stored is None or stored.revoked:
-            raise InvalidRefreshTokenError("Invalid refresh token")
-
-        if stored.used:
-            # Reuso detectado: alguien está reutilizando un refresh token ya
-            # consumido. Se revoca toda la family por seguridad.
-            self.refresh_token_repository.revoke_family(stored.family_id)
-            raise RefreshTokenReuseDetectedError("Refresh token reuse detected")
-
-        expires_at = stored.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at < datetime.now(timezone.utc):
-            raise InvalidRefreshTokenError("Refresh token expired")
 
         user = stored.user
         if user.blocked:
             raise UserBlockedError("User is blocked")
 
-        stored.used = True
-        self.refresh_token_repository.save(stored)
-
-        access_token, new_raw_refresh_token = self._issue_tokens(user, family_id=stored.family_id)
-        return self._build_response(user, access_token, new_raw_refresh_token)
+        self.refresh_token_service.mark_as_used(stored)
+        return self._start_session(user, family_id=stored.family_id)
 
     def logout(self, raw_refresh_token: str) -> None:
-        token_hash = hash_token(raw_refresh_token)
-        stored = self.refresh_token_repository.get_by_token_hash(token_hash)
-        if stored is not None:
-            self.refresh_token_repository.revoke_family(stored.family_id)
+        self.refresh_token_service.revoke_session(raw_refresh_token)
+
+    def get_user_from_access_token(self, access_token: str) -> User:
+        user_id = self.access_tokens.decode(access_token)
+
+        user = self.user_service.find_by_id(user_id, with_permissions=True)
+        if user is None:
+            raise InvalidAccessTokenError("User not found")
+        if user.blocked:
+            raise UserBlockedError("User is blocked")
+
+        return user
+
+    def _authenticate(self, username: str, password: str) -> User:
+        user = self.user_service.find_by_username(username, with_permissions=True)
+        if user is None or not self.password_hasher.verify(password, user.password):
+            raise InvalidCredentialsError("Invalid username or password")
+        if user.blocked:
+            raise UserBlockedError("User is blocked")
+        return user
+
+    def _start_session(self, user: User, family_id: str | None = None) -> AuthResult:
+        return AuthResult(
+            user=user,
+            access_token=self.access_tokens.create(user.id),
+            refresh_token=self.refresh_token_service.issue(user.id, family_id),
+        )

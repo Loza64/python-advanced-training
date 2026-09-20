@@ -1,5 +1,5 @@
 from app.models.role import Role
-from app.schemas.role import RoleResponse
+from app.schemas.role import RoleResponse, RoleSummaryResponse
 
 
 class RoleMapper:
@@ -8,5 +8,9 @@ class RoleMapper:
         return RoleResponse.model_validate(role)
 
     @staticmethod
-    def to_responses(roles: list[Role]) -> list[RoleResponse]:
-        return [RoleMapper.to_response(role) for role in roles]
+    def to_summary(role: Role) -> RoleSummaryResponse:
+        return RoleSummaryResponse.model_validate(role)
+
+    @staticmethod
+    def to_summaries(roles: list[Role]) -> list[RoleSummaryResponse]:
+        return [RoleMapper.to_summary(role) for role in roles]

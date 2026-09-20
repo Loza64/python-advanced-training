@@ -1,7 +1,9 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi_pagination import add_pagination
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +18,7 @@ from app.core.exceptions import (
     DuplicateCategoryNameError,
     DuplicateRoleNameError,
     EmailAlreadyExistsError,
+    InvalidAccessTokenError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
     PermissionDeniedError,
@@ -97,14 +100,16 @@ app = FastAPI(
 
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(ProductCategoryMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 @app.on_event("startup")
 def run_seed() -> None:
-    """Ejecuta los seeders al arrancar la app (permisos, roles de sistema y
-    super_admin inicial). Es idempotente: no duplica permisos ni roles
-    existentes, y no crea un segundo super_admin. Usa su propia sesión (no
-    pasa por get_db), así que hace su propio commit/rollback."""
     db = SessionLocal()
     try:
         run_seeders(db)
@@ -118,7 +123,7 @@ def run_seed() -> None:
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_: Request, exception: RequestValidationError):
-    return JSONResponse(status_code=422, content={"detail": exception.errors()})
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exception.errors())})
 
 
 _NOT_FOUND_ERRORS = (
@@ -137,6 +142,7 @@ _CONFLICT_ERRORS = (
 )
 _UNAUTHORIZED_ERRORS = (
     InvalidCredentialsError,
+    InvalidAccessTokenError,
     InvalidRefreshTokenError,
     RefreshTokenReuseDetectedError,
 )

@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.core.sorting import apply_sort
+from app.repositories.sorting import apply_sort
 from app.models.product import Product
 
 
@@ -14,7 +14,13 @@ class ProductRepository:
         self.session = session
 
     def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[Product]:
-        query = select(Product).where(Product.deleted_at.is_(None))
+        # category es requerido en ProductResponse, así que se carga siempre
+        # con joinedload (1 solo query extra, en vez de N+1 lazy loads).
+        query = (
+            select(Product)
+            .options(joinedload(Product.category))
+            .where(Product.deleted_at.is_(None))
+        )
         if search:
             search_pattern = f"%{search}%"
             query = query.where(
@@ -33,32 +39,31 @@ class ProductRepository:
 
     def get(self, product_id: int) -> Product | None:
         return self.session.scalar(
-            select(Product).where(Product.id == product_id, Product.deleted_at.is_(None))
+            select(Product)
+            .options(joinedload(Product.category))
+            .where(Product.id == product_id, Product.deleted_at.is_(None))
         )
 
     def add(self, product: Product) -> Product:
         self.session.add(product)
         self.session.flush()
-        self.session.refresh(product)
-        return product
+        # No usamos session.refresh(): con lazy="raise_on_sql" expiraría
+        # category (nunca cargada tras un insert) y explotaría al serializar.
+        # Releemos con joinedload; misma transacción, así que ya ve la fila.
+        return self.get(product.id)
 
     def save(self, product: Product) -> Product:
         self.session.flush()
-        self.session.refresh(product)
-        return product
+        return self.get(product.id)
 
     def delete(self, product: Product) -> None:
-        """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
         product.deleted_at = datetime.now(timezone.utc)
         self.session.flush()
 
     def restore(self, product_id: int) -> Product | None:
-        """Revierte un borrado lógico. Devuelve None si no existe o si no
-        estaba borrado."""
         product = self.session.scalar(select(Product).where(Product.id == product_id))
         if product is None or product.deleted_at is None:
             return None
         product.deleted_at = None
         self.session.flush()
-        self.session.refresh(product)
-        return product
+        return self.get(product_id)

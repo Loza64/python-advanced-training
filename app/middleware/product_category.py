@@ -23,7 +23,7 @@ class ProductCategoryMiddleware(BaseHTTPMiddleware):
                 "more_body": False,
             }
 
-        request._receive = receive  # noqa: SLF001
+        request._receive = receive
 
         payload = json.loads(body)
 

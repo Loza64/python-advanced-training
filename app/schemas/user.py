@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.schemas.audit import AuditFieldsMixin
-from app.schemas.role import RoleResponse
+from app.schemas.role import RoleReference, RoleResponse, RoleSummaryResponse
 
 
 class UserBase(BaseModel):
@@ -13,7 +13,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
-    role_id: int | None = None
+    role: RoleReference | None = None
 
 
 class UserUpdate(BaseModel):
@@ -21,27 +21,19 @@ class UserUpdate(BaseModel):
     surname: str | None = Field(default=None, min_length=1, max_length=100)
     email: EmailStr | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
-    role_id: int | None = None
+    role: RoleReference | None = None
     blocked: bool | None = None
 
 
 class UserResponse(UserBase, AuditFieldsMixin):
-    """Respuesta para el CRUD administrativo de usuarios (GET/POST/PUT
-    /users). Incluye createdAt/updatedAt/deletedAt."""
-
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     blocked: bool
-    role: RoleResponse | None = None
+    role: RoleSummaryResponse | None = None
 
 
 class ProfileResponse(UserBase):
-    """Respuesta de 'mi perfil' (GET /auth/me). A diferencia de
-    UserResponse, no incluye campos de auditoría (createdAt/updatedAt/
-    deletedAt): a un usuario viendo su propio perfil no le exponemos esos
-    metadatos internos."""
-
     model_config = ConfigDict(from_attributes=True)
 
     id: int

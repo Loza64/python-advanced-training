@@ -13,10 +13,10 @@ class RefreshToken(BaseEntity):
         Index("ix_refresh_tokens_family_id", "family_id"),
     )
 
-    token: Mapped[str] = mapped_column(String, unique=True, nullable=False)  # sha256 del refresh token
-    family_id: Mapped[str] = mapped_column(String, nullable=False)  # agrupa tokens del mismo login
+    token: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    family_id: Mapped[str] = mapped_column(String, nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # true si hubo reuso o logout
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.core.sorting import apply_sort
+from app.repositories.sorting import apply_sort
 from app.models.category import Category
 
 
@@ -53,13 +53,10 @@ class CategoryRepository:
         return category
 
     def delete(self, category: Category) -> None:
-        """Borrado lógico: marca deleted_at en vez de eliminar la fila."""
         category.deleted_at = datetime.now(timezone.utc)
         self.session.flush()
 
     def restore(self, category_id: int) -> Category | None:
-        """Revierte un borrado lógico. Devuelve None si no existe o si no
-        estaba borrada."""
         category = self.session.scalar(select(Category).where(Category.id == category_id))
         if category is None or category.deleted_at is None:
             return None

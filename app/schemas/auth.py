@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 
+from app.schemas.user import ProfileResponse
+
 
 class SignupRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
@@ -19,8 +21,6 @@ class RefreshRequest(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """Response tal cual solicitado para login, signup y refreshToken."""
-
     token: str
     refreshToken: str
-    data: str
+    data: ProfileResponse

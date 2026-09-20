@@ -1,14 +1,13 @@
-from typing import Callable
+from datetime import timedelta
+from functools import lru_cache
 
-import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.adapters.security import BcryptPasswordHasher, JwtAccessTokenProvider, Sha256OpaqueTokenProvider
 from app.core.config import settings
-from app.core.security import decode_token
+from app.core.ports import AccessTokenPort, OpaqueTokenPort, PasswordHasherPort
 from app.db.session import get_db
-from app.models.user import User
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.permission_repository import PermissionRepository
 from app.repositories.product_repository import ProductRepository
@@ -19,17 +18,29 @@ from app.services.auth_service import AuthService
 from app.services.category_service import CategoryService
 from app.services.permission_service import PermissionService
 from app.services.product_service import ProductService
+from app.services.refresh_token_service import RefreshTokenService
 from app.services.role_service import RoleService
 from app.services.user_service import UserService
 
-# tokenUrl solo se usa para poblar el boton "Authorize" en /docs.
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.api_v1_prefix}/auth/login",
-    auto_error=False,
-)
+
+@lru_cache
+def get_password_hasher() -> PasswordHasherPort:
+    return BcryptPasswordHasher()
 
 
-# --- Repositorios ---
+@lru_cache
+def get_access_token_provider() -> AccessTokenPort:
+    return JwtAccessTokenProvider(
+        secret=settings.JWT_SECRET,
+        algorithm=settings.JWT_ALGORITHM,
+        expire_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+    )
+
+
+@lru_cache
+def get_opaque_token_provider() -> OpaqueTokenPort:
+    return Sha256OpaqueTokenProvider()
+
 
 def get_category_repository(db: Session = Depends(get_db)) -> CategoryRepository:
     return CategoryRepository(db)
@@ -55,8 +66,6 @@ def get_refresh_token_repository(db: Session = Depends(get_db)) -> RefreshTokenR
     return RefreshTokenRepository(db)
 
 
-# --- Servicios ---
-
 def get_category_service(repository: CategoryRepository = Depends(get_category_repository)) -> CategoryService:
     return CategoryService(repository)
 
@@ -68,18 +77,12 @@ def get_product_service(
     return ProductService(repository, category_repository)
 
 
-def get_auth_service(
-    user_repository: UserRepository = Depends(get_user_repository),
-    refresh_token_repository: RefreshTokenRepository = Depends(get_refresh_token_repository),
-) -> AuthService:
-    return AuthService(user_repository, refresh_token_repository)
-
-
 def get_user_service(
     user_repository: UserRepository = Depends(get_user_repository),
     role_repository: RoleRepository = Depends(get_role_repository),
+    password_hasher: PasswordHasherPort = Depends(get_password_hasher),
 ) -> UserService:
-    return UserService(user_repository, role_repository)
+    return UserService(user_repository, role_repository, password_hasher)
 
 
 def get_role_service(
@@ -95,57 +98,21 @@ def get_permission_service(
     return PermissionService(permission_repository)
 
 
-# --- Auth / RBAC ---
-
-def get_current_user(
-    token: str | None = Depends(oauth2_scheme),
-    user_repository: UserRepository = Depends(get_user_repository),
-) -> User:
-    credentials_error = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+def get_refresh_token_service(
+    repository: RefreshTokenRepository = Depends(get_refresh_token_repository),
+    tokens: OpaqueTokenPort = Depends(get_opaque_token_provider),
+) -> RefreshTokenService:
+    return RefreshTokenService(
+        repository,
+        tokens,
+        ttl=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
 
-    if token is None:
-        raise credentials_error
 
-    try:
-        payload = decode_token(token)
-    except jwt.PyJWTError as exc:
-        raise credentials_error from exc
-
-    if payload.get("type") != "access":
-        raise credentials_error
-
-    try:
-        user_id = int(payload["sub"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise credentials_error from exc
-
-    user = user_repository.get_by_id(user_id)
-    if user is None:
-        raise credentials_error
-
-    if user.blocked:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is blocked")
-
-    return user
-
-
-def require_permissions(*required_permissions: str) -> Callable[..., User]:
-    """Dependencia de RBAC: exige que el usuario autenticado tenga, a traves
-    de su rol activo, todos los permisos indicados."""
-
-    def checker(current_user: User = Depends(get_current_user)) -> User:
-        has_active_role = current_user.role is not None and current_user.role.active
-        user_permissions = (
-            {permission.name for permission in current_user.role.permissions} if has_active_role else set()
-        )
-
-        if not set(required_permissions).issubset(user_permissions):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
-
-        return current_user
-
-    return checker
+def get_auth_service(
+    user_service: UserService = Depends(get_user_service),
+    refresh_token_service: RefreshTokenService = Depends(get_refresh_token_service),
+    password_hasher: PasswordHasherPort = Depends(get_password_hasher),
+    access_tokens: AccessTokenPort = Depends(get_access_token_provider),
+) -> AuthService:
+    return AuthService(user_service, refresh_token_service, password_hasher, access_tokens)
