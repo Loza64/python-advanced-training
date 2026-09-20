@@ -32,6 +32,6 @@ def logout(data: RefreshRequest, service: AuthService = Depends(get_auth_service
     service.logout(data.refreshToken)
 
 
-@router.get("/me", response_model=ProfileResponse)
+@router.get("/profile", response_model=ProfileResponse)
 def me(current_user: User = Depends(get_current_user)):
     return UserMapper.to_profile_response(current_user)
