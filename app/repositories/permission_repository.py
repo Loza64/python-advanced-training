@@ -1,16 +1,41 @@
 from typing import Optional
 
+from fastapi_pagination import Page, Params
+from fastapi_pagination.ext.sqlalchemy import paginate
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.permission import Permission
+from app.repositories.sorting import apply_sort
 
 
 class PermissionRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_all(self) -> list[Permission]:
-        return self.db.query(Permission).order_by(Permission.id).all()
+    def list(
+        self, params: Params, sort: list[str] | None, search: str | None
+    ) -> Page[Permission]:
+        query = select(Permission).where(Permission.deleted_at.is_(None))
+
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.where(
+                or_(
+                    Permission.name.ilike(search_pattern),
+                    Permission.title.ilike(search_pattern),
+                )
+            )
+        if sort:
+            query = apply_sort(
+                query,
+                Permission,
+                sort,
+                {"id", "name", "title"},
+            )
+        else:
+            query = query.order_by(Permission.id)
+        return paginate(self.db, query, params)
 
     def get_by_id(self, permission_id: int) -> Optional[Permission]:
         return self.db.query(Permission).filter(Permission.id == permission_id).first()

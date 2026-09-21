@@ -20,6 +20,7 @@ class PaginationParams(Params):
         le=100,
         description="Cantidad de elementos por página. Valores permitidos: de 1 a 100.",
         examples=[10, 50],
+        alias="pageSize",
     )
 
 
@@ -28,7 +29,9 @@ class PaginationMeta(BaseModel):
 
     page: int
     page_size: int = Field(serialization_alias="pageSize", validation_alias="pageSize")
-    page_count: int = Field(serialization_alias="pageCount", validation_alias="pageCount")
+    page_count: int = Field(
+        serialization_alias="pageCount", validation_alias="pageCount"
+    )
     total: int
 
 

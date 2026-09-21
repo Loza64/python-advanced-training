@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fastapi_pagination import Page, Params
+
 from app.core.exceptions import PermissionNotFoundError
 from app.core.ports import PermissionRepositoryProtocol
 from app.models.permission import Permission
@@ -10,8 +12,8 @@ class PermissionService:
     def __init__(self, repository: PermissionRepositoryProtocol) -> None:
         self.repository = repository
 
-    def list(self) -> list[Permission]:
-        return self.repository.list_all()
+    def list(self, params: Params, sort: list[str] | None, search: str | None) -> Page[Permission]:
+        return self.repository.list(params, sort, search)
 
     def get(self, permission_id: int) -> Permission:
         permission = self.repository.get_by_id(permission_id)
